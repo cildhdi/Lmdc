@@ -89,7 +89,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="MainWindow.cpp" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="MainWindow.h" />
@@ -99,6 +98,9 @@
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="Lmdc.qrc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="LmType.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

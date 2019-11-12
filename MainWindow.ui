@@ -224,7 +224,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QPushButton" name="pushButton">
+             <widget class="QPushButton" name="btnClear">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                 <horstretch>0</horstretch>
@@ -239,7 +239,7 @@
            </layout>
           </item>
           <item>
-           <widget class="QListWidget" name="listLog"/>
+           <widget class="QTextBrowser" name="textLog"/>
           </item>
          </layout>
         </widget>

@@ -26,6 +26,9 @@ class MainWindow : public QMainWindow {
             [this]() { setEditsEnabled(false); });
     connect(ui.btnStop, &QPushButton::clicked,
             [this]() { setEditsEnabled(true); });
+
+    connect(ui.btnClear, &QPushButton::clicked,
+            [this]() { ui.textLog->clear(); });
   }
 
  private:
@@ -61,15 +64,11 @@ class MainWindow : public QMainWindow {
                             ui.editUrl->toolTip() + QStringLiteral("²»ÄÜÎª¿Õ"));
       return;
     }
+    wsocket.close();
     wsocket.open(QUrl{ui.editUrl->text()});
   }
 
   void lmClose() { wsocket.close(); }
 
-  void onFrame(QString const& msg) {
-    ui.listLog->addItem(msg);
-    if (ui.listLog->count() > ui.spinLogCount->value()) {
-      ui.listLog->removeItemWidget(ui.listLog->item(0));
-    }
-  }
+  void onFrame(QString const& msg) { ui.textLog->append(msg + "\n\n"); }
 };
