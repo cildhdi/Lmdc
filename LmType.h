@@ -7,6 +7,8 @@
 #include <qjsonobject.h>
 #include <map>
 
+namespace mxt {
+
 struct Vector {
   double x = 0.0, y = 0.0, z = 0.0;
   Vector() {}
@@ -35,18 +37,24 @@ struct Hand {
 };
 
 struct Frame {
-  int id = 0;
-  int timestamp = 0;
+  long long id = 0;
+  long long timestamp = 0;
   std::map<int, Hand> hands;
+
+  auto findHandByType(HandType type) {
+    auto it = hands.begin();
+    while (it != hands.end() && it->second.type != type) ++it;
+    return it;
+  }
 
   Frame(QJsonObject const& json) {
     if (json.contains("id")) {
       QJsonValue value = json.value("id");
-      if (value.isDouble()) id = value.toInt();
+      if (value.isDouble()) id = value.toVariant().toLongLong();
     }
     if (json.contains("timestamp")) {
       QJsonValue value = json.value("timestamp");
-      if (value.isDouble()) timestamp = value.toInt();
+      if (value.isDouble()) timestamp = value.toVariant().toLongLong();
     }
     if (json.contains("hands")) {
       QJsonValue handsJson = json.value("hands");
@@ -61,14 +69,39 @@ struct Frame {
             hand.type = handObject.value("type").toString() == "left"
                             ? HandType::Left
                             : HandType::Right;
+          hands[hand.id] = hand;
         }
       }
     }
     if (json.contains("pointables")) {
       auto pointables = json.value("pointables").toArray();
       for (auto& pointableJson : pointables) {
+        auto pointableObject = pointableJson.toObject();
+        int handId = pointableObject.value("handId").toInt();
+        if (hands.find(handId) != hands.end()) {
+          Finger finger;
+          Bone bone;
 
+#define BONES_TO_FINGER(prev, next, boneType)                      \
+  bone.prevJoint = Vector(pointableObject.value(#prev).toArray()); \
+  bone.nextJoint = Vector(pointableObject.value(#next).toArray()); \
+  finger[boneType] = bone;
+
+          BONES_TO_FINGER(carpPosition, mcpPosition, BoneType::Metacarpal)
+          BONES_TO_FINGER(mcpPosition, pipPosition, BoneType::Proximal)
+          BONES_TO_FINGER(pipPosition, dipPosition, BoneType::Medial)
+          BONES_TO_FINGER(dipPosition, btipPosition, BoneType::Distal)
+
+#undef BONES_TO_FINGER
+
+          FingerType fingerType =
+              static_cast<FingerType>(pointableObject.value("type").toInt());
+
+          hands[handId].fingers[fingerType] = finger;
+        }
       }
     }
   }
 };
+
+}  // namespace mxt

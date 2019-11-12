@@ -5,6 +5,7 @@
 #include <QtWidgets/QMainWindow>
 #include <functional>
 #include <memory>
+#include "LmType.h"
 #include "ui_MainWindow.h"
 
 class MainWindow : public QMainWindow {
@@ -20,6 +21,11 @@ class MainWindow : public QMainWindow {
     connect(ui.btnDisconnect, &QPushButton::clicked, this,
             &MainWindow::lmClose);
     connect(ui.btnReset, &QPushButton::clicked, this, &MainWindow::resetUrl);
+
+    connect(ui.editAction, &QLineEdit::textChanged, this,
+            &MainWindow::filenameChanged);
+    connect(ui.spinRepeat, SIGNAL(valueChanged(int)), this,
+            SLOT(filenameChanged()));
 
     setEditsEnabled(true);
     connect(ui.btnStart, &QPushButton::clicked,
@@ -54,10 +60,10 @@ class MainWindow : public QMainWindow {
     ui.spinRepeat->setEnabled(enabled);
     ui.spinTime->setEnabled(enabled);
     ui.btnStart->setEnabled(enabled);
-    ui.btnPause->setEnabled(!enabled);
     ui.btnStop->setEnabled(!enabled);
   }
 
+ private slots:
   void lmOpen() {
     if (ui.editUrl->text().isEmpty()) {
       QMessageBox::critical(this, QStringLiteral("´íÎó"),
@@ -68,7 +74,31 @@ class MainWindow : public QMainWindow {
     wsocket.open(QUrl{ui.editUrl->text()});
   }
 
+  void filenameChanged() {
+    QString actionName = ui.editAction->text();
+    int repeatTime = ui.spinRepeat->value();
+    ui.listFilename->clear();
+
+    QStringList filenames;
+    for (int i = 0; i < repeatTime; i++)
+      filenames.append("data/" + actionName + "/" + QString::number(i) + ".csv");
+    ui.listFilename->addItems(filenames);
+
+    ui.listFilename->setItemSelected(ui.listFilename->item(0), true);
+  }
+
   void lmClose() { wsocket.close(); }
 
-  void onFrame(QString const& msg) { ui.textLog->append(msg + "\n\n"); }
+  void onFrame(QString const& msg) {
+    auto doc = QJsonDocument::fromJson(msg.toLatin1());
+    mxt::Frame frame(doc.object());
+    if (frame.hands.size() != 0) {
+      ui.textLog->append(QString("id: %1, timestamp:%2, handnum:%3\n\n")
+                             .arg(frame.id)
+                             .arg(frame.timestamp)
+                             .arg(frame.hands.size()));
+    } else if (frame.id == 0) {
+      ui.textLog->append(msg + "\n\n");
+    }
+  }
 };
