@@ -31,8 +31,8 @@ using Finger = std::map<BoneType, Bone>;
 
 enum class HandType { Left, Right };
 struct Hand {
-  int id;
-  HandType type;
+  int id = 0;
+  HandType type = HandType::Left;
   std::map<FingerType, Finger> fingers;
 };
 
