@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QtWebSockets/qwebsocket.h>
+#include <qdir.h>
+#include <qfile.h>
 #include <qtimer.h>
 #include <QMessageBox>
 #include <QtWidgets/QMainWindow>
@@ -37,6 +39,8 @@ class MainWindow : public QMainWindow {
 
     connect(&timer, &QTimer::timeout, this, &MainWindow::onTimeOut);
     ui.pgrTime->setRange(0, 100);
+
+    csv.reserve(50000);
   }
 
  private:
@@ -44,6 +48,7 @@ class MainWindow : public QMainWindow {
   QWebSocket wsocket;
   QTimer timer;
   enum State { Stop, Prepare, Collect } state;
+  QString csv;
 
   void resetUrl() { ui.editUrl->setText("ws://127.0.0.1:6437/v6.json"); }
 
@@ -55,9 +60,12 @@ class MainWindow : public QMainWindow {
 
     ui.editAction->setEnabled(enabled);
     ui.spinRepeat->setEnabled(enabled);
+    ui.spinPrepare->setEnabled(enabled);
     ui.spinTime->setEnabled(enabled);
     ui.btnStart->setEnabled(enabled);
     ui.btnStop->setEnabled(!enabled);
+
+    ui.listFilename->setDisabled(!enabled);
   }
 
  private slots:
@@ -81,10 +89,12 @@ class MainWindow : public QMainWindow {
         break;
       case State::Prepare:
         ui.textLog->append(QStringLiteral("请准备....\n\n"));
-        timerStart(5);
+        timerStart(ui.spinPrepare->value());
         break;
       case State::Collect:
-        ui.textLog->append(QStringLiteral("数据收集开始....\n\n"));
+        ui.textLog->append(QStringLiteral("数据收集开始 ->") +
+                           ui.listFilename->currentItem()->text() + "\n\n");
+        csv.clear();
         timerStart(ui.spinTime->value());
         break;
       default:
@@ -120,9 +130,33 @@ class MainWindow : public QMainWindow {
           case State::Prepare:
             changeState(Collect);
             break;
-          case State::Collect:
-            changeState(Prepare);
-            break;
+          case State::Collect: {
+            {
+              auto filename = ui.listFilename->currentItem()->text();
+              QDir().mkpath(QApplication::applicationDirPath() +
+                            QFileInfo(filename).dir().path());
+              QFile file(QApplication::applicationDirPath() + filename);
+              if (file.open(QFile::WriteOnly | QIODevice::Truncate)) {
+                QTextStream out(&file);
+                out << csv;
+                file.close();
+                ui.textLog->append(QStringLiteral("已保存到 ") +
+                                   file.fileName() + "\n\n");
+              } else {
+                ui.textLog->append(QStringLiteral("保存失败， ") +
+                                   file.errorString() + "\n\n");
+              }
+            }
+
+            auto index = ui.listFilename->currentRow();
+            if (index < ui.listFilename->count() - 1) {
+              ui.listFilename->setCurrentRow(index + 1);
+              changeState(Prepare);
+            } else {
+              changeState(Stop);
+            }
+
+          } break;
           default:
             break;
         }
@@ -142,29 +176,33 @@ class MainWindow : public QMainWindow {
 
   void filenameChanged() {
     QString actionName = ui.editAction->text();
+    if (actionName.isEmpty()) return;
     int repeatTime = ui.spinRepeat->value();
     ui.listFilename->clear();
 
     QStringList filenames;
     for (int i = 0; i < repeatTime; i++)
-      filenames.append("data/" + actionName + "/" + QString::number(i) +
+      filenames.append("/data/" + actionName + "/" + QString::number(i) +
                        ".csv");
     ui.listFilename->addItems(filenames);
 
-    ui.listFilename->setItemSelected(ui.listFilename->item(0), true);
+    ui.listFilename->setCurrentRow(0);
   }
 
   void lmClose() { wsocket.close(); }
 
   void onFrame(QString const& msg) {
-    auto doc = QJsonDocument::fromJson(msg.toLatin1());
-    mxt::Frame frame(doc.object());
+    mxt::Frame frame(msg);
     if (frame.hands.size() != 0) {
       ui.labelCurrentFrame->setText(
-          QStringLiteral("当前帧：id: %1, timestamp:%2, handnum:%3\n\n")
+          QStringLiteral("当前帧：id: %1, timestamp:%2, handnum:%3")
               .arg(frame.id)
               .arg(frame.timestamp)
               .arg(frame.hands.size()));
+      if (state == Collect) {
+        if (csv.isEmpty()) csv.append(frame.toCsvLine(true));
+        csv.append(frame.toCsvLine());
+      }
     } else if (frame.id == 0) {
       ui.textLog->append(msg + "\n\n");
     }
