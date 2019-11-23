@@ -192,7 +192,8 @@ class MainWindow : public QMainWindow {
   void lmClose() { wsocket.close(); }
 
   void onFrame(QString const& msg) {
-    mxt::Frame frame(msg);
+    auto bytes = msg.toLatin1();
+    mxt::Frame frame(bytes.constData());
     if (frame.hands.size() != 0) {
       ui.labelCurrentFrame->setText(
           QStringLiteral("µ±Ç°Ö¡£ºid: %1, timestamp:%2, handnum:%3")

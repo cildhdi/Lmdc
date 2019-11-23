@@ -2,9 +2,7 @@
 
 #pragma once
 
-#include <qjsonarray.h>
-#include <qjsondocument.h>
-#include <qjsonobject.h>
+#include <rapidjson/document.h>
 #include <map>
 
 #define LM_CASE(name) \
@@ -16,12 +14,14 @@ namespace mxt {
 
 struct Vector {
   double x = 0.0, y = 0.0, z = 0.0;
-  Vector() {}
-  Vector(QJsonArray const& array) {
-    if (array.size() == 3) {
-      if (array.at(0).isDouble()) x = array.at(0).toDouble();
-      if (array.at(1).isDouble()) y = array.at(1).toDouble();
-      if (array.at(2).isDouble()) z = array.at(2).toDouble();
+  Vector(double xv = 0.0, double yv = 0.0, double zv = 0.0)
+      : x(xv), y(yv), z(zv) {}
+  Vector(const rapidjson::GenericArray<false, rapidjson::Value>& array)
+      : Vector() {
+    if (array.Size() == 3) {
+      if (array[0].IsDouble()) x = array[0].GetDouble();
+      if (array[1].IsDouble()) y = array[1].GetDouble();
+      if (array[2].IsDouble()) z = array[2].GetDouble();
     }
   }
 };
@@ -31,7 +31,8 @@ enum BoneType { Metacarpal, Proximal, Medial, Distal };
 __forceinline const char* BoneTypeName(BoneType type) {
   switch (type) {
     LM_CASE(Metacarpal)
-    LM_CASE(Proximal) LM_CASE(Medial) LM_CASE(Distal) default : break;
+    LM_CASE(Proximal) LM_CASE(Medial) LM_CASE(Distal) default : return "";
+    break;
   }
 }
 
@@ -39,8 +40,8 @@ struct Bone {
   Vector prevJoint, nextJoint;
 
   Vector direction() const {
-    return Vector({(nextJoint.x - prevJoint.x), (nextJoint.y - prevJoint.y),
-                   (nextJoint.z - prevJoint.z)});
+    return Vector((nextJoint.x - prevJoint.x), (nextJoint.y - prevJoint.y),
+                  (nextJoint.z - prevJoint.z));
   }
 };
 
@@ -48,7 +49,9 @@ enum FingerType { Thumb, Index, Middle, Ring, Pinky };
 __forceinline const char* FingerTypeName(FingerType type) {
   switch (type) {
     LM_CASE(Thumb)
-    LM_CASE(Index) LM_CASE(Middle) LM_CASE(Ring) LM_CASE(Pinky) default : break;
+    LM_CASE(Index)
+    LM_CASE(Middle) LM_CASE(Ring) LM_CASE(Pinky) default : return "";
+    break;
   }
 }
 using Finger = std::map<BoneType, Bone>;
@@ -71,46 +74,47 @@ struct Frame {
     return it;
   }
 
-  Frame(QString const& text) {
-    auto doc = QJsonDocument::fromJson(text.toLatin1());
-    auto json = doc.object();
-    if (json.contains("id")) {
-      QJsonValue value = json.value("id");
-      if (value.isDouble()) id = value.toVariant().toLongLong();
+  Frame(const char* text) {
+    auto doc = rapidjson::Document();
+    doc.Parse(text);
+    const auto& json = doc.GetObject();
+    if (auto idv = json.FindMember("id");
+        idv != json.MemberEnd() && idv->value.IsInt64()) {
+      id = idv->value.GetInt64();
     }
-    if (json.contains("timestamp")) {
-      QJsonValue value = json.value("timestamp");
-      if (value.isDouble()) timestamp = value.toVariant().toLongLong();
+    if (auto tsv = json.FindMember("timestamp");
+        tsv != json.MemberEnd() && tsv->value.IsInt64()) {
+      timestamp = tsv->value.GetInt64();
     }
-    if (json.contains("hands")) {
-      QJsonValue handsJson = json.value("hands");
-      if (handsJson.isArray()) {
-        QJsonArray handsArray = handsJson.toArray();
-        for (auto& handJson : handsArray) {
-          auto handObject = handJson.toObject();
-          Hand hand;
-          if (handObject.contains("id"))
-            hand.id = handObject.value("id").toInt();
-          if (handObject.contains("type"))
-            hand.type = handObject.value("type").toString() == "left"
-                            ? HandType::Left
-                            : HandType::Right;
-          hands[hand.id] = hand;
-        }
+    if (auto handsv = json.FindMember("hands");
+        handsv != json.MemberEnd() && handsv->value.IsArray()) {
+      const auto& handsArray = handsv->value.GetArray();
+      for (const auto& handJson : handsArray) {
+        Hand hand;
+        if (auto idv = handJson.FindMember("id");
+            idv != handJson.MemberEnd() && idv->value.IsInt())
+          hand.id = idv->value.GetInt();
+        if (auto typev = handJson.FindMember("type");
+            typev != handJson.MemberEnd() && typev->value.IsString())
+          hand.type = std::strcmp(typev->value.GetString(), "left") == 0
+                          ? HandType::Left
+                          : HandType::Right;
+        hands[hand.id] = hand;
       }
     }
-    if (json.contains("pointables")) {
-      auto pointables = json.value("pointables").toArray();
+    if (auto pointablesv = json.FindMember("pointables");
+        pointablesv != json.MemberEnd() && pointablesv->value.IsArray()) {
+      const auto& pointables = pointablesv->value.GetArray();
       for (auto& pointableJson : pointables) {
-        auto pointableObject = pointableJson.toObject();
-        int handId = pointableObject.value("handId").toInt();
-        if (hands.find(handId) != hands.end()) {
+        if (auto handIdv = pointableJson.FindMember("handId");
+            handIdv != pointableJson.MemberEnd() && handIdv->value.IsInt() &&
+            hands.find(handIdv->value.GetInt()) != hands.end()) {
           Finger finger;
           Bone bone;
 
-#define BONES_TO_FINGER(prev, next, boneType)                      \
-  bone.prevJoint = Vector(pointableObject.value(#prev).toArray()); \
-  bone.nextJoint = Vector(pointableObject.value(#next).toArray()); \
+#define BONES_TO_FINGER(prev, next, boneType)               \
+  bone.prevJoint = Vector(pointableJson[#prev].GetArray()); \
+  bone.nextJoint = Vector(pointableJson[#next].GetArray()); \
   finger[boneType] = bone;
 
           BONES_TO_FINGER(carpPosition, mcpPosition, BoneType::Metacarpal)
@@ -121,9 +125,9 @@ struct Frame {
 #undef BONES_TO_FINGER
 
           FingerType fingerType =
-              static_cast<FingerType>(pointableObject.value("type").toInt());
+              static_cast<FingerType>(pointableJson["type"].GetInt());
 
-          hands[handId].fingers[fingerType] = finger;
+          hands[handIdv->value.GetInt()].fingers[fingerType] = finger;
         }
       }
     }
