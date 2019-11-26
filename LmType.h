@@ -31,7 +31,8 @@ enum BoneType { Metacarpal, Proximal, Medial, Distal };
 __forceinline const char* BoneTypeName(BoneType type) {
   switch (type) {
     LM_CASE(Metacarpal)
-    LM_CASE(Proximal) LM_CASE(Medial) LM_CASE(Distal) default : break;
+    LM_CASE(Proximal) LM_CASE(Medial) LM_CASE(Distal) default : return 0;
+    break;
   }
 }
 
@@ -48,7 +49,9 @@ enum FingerType { Thumb, Index, Middle, Ring, Pinky };
 __forceinline const char* FingerTypeName(FingerType type) {
   switch (type) {
     LM_CASE(Thumb)
-    LM_CASE(Index) LM_CASE(Middle) LM_CASE(Ring) LM_CASE(Pinky) default : break;
+    LM_CASE(Index)
+    LM_CASE(Middle) LM_CASE(Ring) LM_CASE(Pinky) default : return 0;
+    break;
   }
 }
 using Finger = std::map<BoneType, Bone>;

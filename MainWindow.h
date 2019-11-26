@@ -105,7 +105,7 @@ class MainWindow : public QMainWindow {
 
   void stop() { changeState(Stop); }
 
-  void timerStart(int s) {
+  void timerStart(double s) {
     if (timer.isActive()) {
       timer.stop();
     }
