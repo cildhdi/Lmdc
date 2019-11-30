@@ -28,13 +28,6 @@ struct Vector {
 // https://github.com/leapmotion/leapjs/blob/31b00723f98077304acda3200f9fbcbaaf29294a/lib/finger.js#L136
 
 enum BoneType { Metacarpal, Proximal, Medial, Distal };
-__forceinline const char* BoneTypeName(BoneType type) {
-  switch (type) {
-    LM_CASE(Metacarpal)
-    LM_CASE(Proximal) LM_CASE(Medial) LM_CASE(Distal) default : return 0;
-    break;
-  }
-}
 
 struct Bone {
   Vector prevJoint, nextJoint;
@@ -46,7 +39,31 @@ struct Bone {
 };
 
 enum FingerType { Thumb, Index, Middle, Ring, Pinky };
-__forceinline const char* FingerTypeName(FingerType type) {
+
+struct Finger {
+  std::map<BoneType, Bone> bones;
+  Vector tipPosition;
+};
+
+enum class HandType { Left, Right };
+struct Hand {
+  int id = 0;
+  HandType type = HandType::Left;
+  std::map<FingerType, Finger> fingers;
+  Vector palmPosition, palmNormal;
+};
+
+namespace detail {
+
+inline const char* boneTypeName(BoneType type) {
+  switch (type) {
+    LM_CASE(Metacarpal)
+    LM_CASE(Proximal) LM_CASE(Medial) LM_CASE(Distal) default : return 0;
+    break;
+  }
+}
+
+inline const char* fingerTypeName(FingerType type) {
   switch (type) {
     LM_CASE(Thumb)
     LM_CASE(Index)
@@ -54,14 +71,24 @@ __forceinline const char* FingerTypeName(FingerType type) {
     break;
   }
 }
-using Finger = std::map<BoneType, Bone>;
 
-enum class HandType { Left, Right };
-struct Hand {
-  int id = 0;
-  HandType type = HandType::Left;
-  std::map<FingerType, Finger> fingers;
-};
+inline QString makeXyzString(const QString& vectorName) {
+  QString result{};
+  result.append(vectorName + "X,");
+  result.append(vectorName + "Y,");
+  result.append(vectorName + "Z,");
+  return result;
+}
+
+inline QString makeXyzValue(const Vector& vector) {
+  QString result{};
+  result.append(QString::number(vector.x) + ",");
+  result.append(QString::number(vector.y) + ",");
+  result.append(QString::number(vector.z) + ",");
+  return result;
+}
+
+}  // namespace detail
 
 struct Frame {
   long long id = 0;
@@ -70,7 +97,9 @@ struct Frame {
 
   auto findHandByType(HandType type) {
     auto it = hands.begin();
-    while (it != hands.end() && it->second.type != type) ++it;
+    while (it != hands.end() && it->second.type != type) {
+      ++it;
+    }
     return it;
   }
 
@@ -91,13 +120,22 @@ struct Frame {
         QJsonArray handsArray = handsJson.toArray();
         for (auto& handJson : handsArray) {
           auto handObject = handJson.toObject();
-          Hand hand;
-          if (handObject.contains("id"))
+          Hand hand{};
+          if (handObject.contains("id")) {
             hand.id = handObject.value("id").toInt();
-          if (handObject.contains("type"))
+          }
+          if (handObject.contains("type")) {
             hand.type = handObject.value("type").toString() == "left"
                             ? HandType::Left
                             : HandType::Right;
+          }
+          if (handObject.contains("palmPosition")) {
+            hand.palmPosition =
+                Vector{handObject.value("palmPosition").toArray()};
+          }
+          if (handObject.contains("palmNormal")) {
+            hand.palmNormal = Vector{handObject.value("palmNormal").toArray()};
+          }
           hands[hand.id] = hand;
         }
       }
@@ -108,13 +146,13 @@ struct Frame {
         auto pointableObject = pointableJson.toObject();
         int handId = pointableObject.value("handId").toInt();
         if (hands.find(handId) != hands.end()) {
-          Finger finger;
-          Bone bone;
+          Finger finger{};
+          Bone bone{};
 
 #define BONES_TO_FINGER(prev, next, boneType)                      \
-  bone.prevJoint = Vector(pointableObject.value(#prev).toArray()); \
-  bone.nextJoint = Vector(pointableObject.value(#next).toArray()); \
-  finger[boneType] = bone;
+  bone.prevJoint = Vector{pointableObject.value(#prev).toArray()}; \
+  bone.nextJoint = Vector{pointableObject.value(#next).toArray()}; \
+  finger.bones[boneType] = bone;
 
           BONES_TO_FINGER(carpPosition, mcpPosition, BoneType::Metacarpal)
           BONES_TO_FINGER(mcpPosition, pipPosition, BoneType::Proximal)
@@ -123,6 +161,8 @@ struct Frame {
 
 #undef BONES_TO_FINGER
 
+          finger.tipPosition =
+              Vector{pointableObject.value("tipPosition").toArray()};
           FingerType fingerType =
               static_cast<FingerType>(pointableObject.value("type").toInt());
 
@@ -137,13 +177,15 @@ struct Frame {
     if (header) {
       res.append("id,");
       for (auto& hand : hands) {
+        res.append(detail::makeXyzString("PalmPosition"));
+        res.append(detail::makeXyzString("PalmNormal"));
         for (auto& finger : hand.second.fingers) {
-          for (auto& bone : finger.second) {
-            QString prefix = FingerTypeName(finger.first) +
-                             QString(BoneTypeName(bone.first));
-            res.append(prefix + "DirectionX,");
-            res.append(prefix + "DirectionY,");
-            res.append(prefix + "DirectionZ,");
+          res.append(detail::makeXyzString(
+              detail::fingerTypeName(finger.first) + QString{"TipPosition"}));
+          for (auto& bone : finger.second.bones) {
+            QString prefix = detail::fingerTypeName(finger.first) +
+                             QString{detail::boneTypeName(bone.first)};
+            res.append(detail::makeXyzString(prefix + "Direction"));
           }
         }
         break;
@@ -151,12 +193,12 @@ struct Frame {
     } else {
       res.append(QString::number(id) + ",");
       for (auto& hand : hands) {
+        res.append(detail::makeXyzValue(hand.second.palmPosition));
+        res.append(detail::makeXyzValue(hand.second.palmNormal));
         for (auto& finger : hand.second.fingers) {
-          for (auto& bone : finger.second) {
-            auto d = bone.second.direction();
-            res.append(QString::number(d.x) + ",");
-            res.append(QString::number(d.y) + ",");
-            res.append(QString::number(d.z) + ",");
+          res.append(detail::makeXyzValue(finger.second.tipPosition));
+          for (auto& bone : finger.second.bones) {
+            res.append(detail::makeXyzValue(bone.second.direction()));
           }
         }
         break;
