@@ -195,10 +195,11 @@ class MainWindow : public QMainWindow {
     mxt::Frame frame(msg);
     if (frame.hands.size() != 0) {
       ui.labelCurrentFrame->setText(
-          QStringLiteral("当前帧：id: %1, timestamp:%2, handnum:%3")
+          QStringLiteral("当前帧：id: %1, timestamp:%2, Palm:(%3)")
               .arg(frame.id)
               .arg(frame.timestamp)
-              .arg(frame.hands.size()));
+              .arg(mxt::detail::makeXyzValue(
+                  frame.hands.begin()->second.palmPosition)));
       if (state == Collect) {
         if (csv.isEmpty()) csv.append(frame.toCsvLine(true));
         csv.append(frame.toCsvLine());
