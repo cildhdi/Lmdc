@@ -192,7 +192,8 @@ class MainWindow : public QMainWindow {
   void lmClose() { wsocket.close(); }
 
   void onFrame(QString const& msg) {
-    mxt::Frame frame(msg);
+    auto doc = QJsonDocument::fromJson(msg.toLatin1());
+    mxt::Frame frame(doc.object());
     if (frame.hands.size() != 0) {
       ui.labelCurrentFrame->setText(
           QStringLiteral("µ±Ç°Ö¡£ºid: %1, timestamp:%2, Palm:(%3)")

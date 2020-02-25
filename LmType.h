@@ -5,6 +5,7 @@
 #include <qjsonarray.h>
 #include <qjsondocument.h>
 #include <qjsonobject.h>
+#include <qvariant.h>
 #include <map>
 
 #define LM_CASE(name) \
@@ -24,6 +25,10 @@ struct Vector {
       if (array.at(2).isDouble()) z = array.at(2).toDouble();
     }
   }
+
+  Vector operator-(const Vector& rhs) const {
+    return Vector({(this->x - rhs.x), (this->y - rhs.y), (this->z - rhs.z)});
+  }
 };
 // https://github.com/leapmotion/leapjs/blob/31b00723f98077304acda3200f9fbcbaaf29294a/lib/finger.js#L136
 
@@ -32,10 +37,7 @@ enum BoneType { Metacarpal, Proximal, Medial, Distal };
 struct Bone {
   Vector prevJoint, nextJoint;
 
-  Vector direction() const {
-    return Vector({(nextJoint.x - prevJoint.x), (nextJoint.y - prevJoint.y),
-                   (nextJoint.z - prevJoint.z)});
-  }
+  Vector direction() const { return nextJoint - prevJoint; }
 };
 
 enum FingerType { Thumb, Index, Middle, Ring, Pinky };
@@ -103,9 +105,9 @@ struct Frame {
     return it;
   }
 
-  Frame(QString const& text) {
-    auto doc = QJsonDocument::fromJson(text.toLatin1());
-    auto json = doc.object();
+  Frame() {}
+
+  Frame(const QJsonObject& json) {
     if (json.contains("id")) {
       QJsonValue value = json.value("id");
       if (value.isDouble()) id = value.toVariant().toLongLong();
